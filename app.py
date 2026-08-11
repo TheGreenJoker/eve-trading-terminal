@@ -73,49 +73,60 @@ def calculate_metrics(orders, history, broker_fee_pct=0.03, sales_tax_pct=0.036)
     spread = best_sell - best_buy
     spread_pct = (spread / best_buy) * 100
 
-    # Financial Net Profit calculation
-    # Net Sell = Best Sell * (1 - Sales Tax)
-    # Net Buy = Best Buy * (1 + Broker Fee)
+    # Calculated Financial Net Profit
     net_sell = best_sell * (1 - sales_tax_pct)
     net_buy = best_buy * (1 + broker_fee_pct)
     net_profit_per_unit = net_sell - net_buy
     roi_pct = (net_profit_per_unit / net_buy) * 100 if net_buy > 0 else 0
 
-    # History Data Analysis
+    # Trend Analysis over 7D vs 30D (Pression Achat / Vente)
+    buy_trend = "NEUTRAL"
+    sell_trend = "NEUTRAL"
+    is_banger = False
+
     daily_volume = 0
     volatility = 0.1
-    if history:
-        recent_30d = history[-30:] if len(history) >= 30 else history
-        total_vol = sum(h['volume'] for h in recent_30d)
-        daily_volume = total_vol / max(len(recent_30d), 1)
-        
-        prices = [h['average'] for h in recent_30d]
-        if len(prices) > 1:
-            mean_p = sum(prices) / len(prices)
-            variance = sum((x - mean_p) ** 2 for x in prices) / len(prices)
-            volatility = (math.sqrt(variance) / mean_p) if mean_p > 0 else 0.1
+    
+    if history and len(history) >= 7:
+        recent_7d = history[-7:]
+        older_30d = history[-30:] if len(history) >= 30 else history
+
+        # Calcul des prix moyens historiques
+        price_7d = sum(h['average'] for h in recent_7d) / len(recent_7d)
+        price_30d = sum(h['average'] for h in older_30d) / len(older_30d)
+
+        # Calcul des volumes
+        daily_volume = sum(h['volume'] for h in recent_7d) / len(recent_7d)
+
+        # Si le prix récent de vente monte par rapport à la moyenne 30J
+        if best_sell > price_7d > price_30d:
+            sell_trend = "RISING"  # Prix de vente en hausse -> Écoulement fort
+
+        # Si le prix d'achat/entrée est inférieur aux moyennes récentes
+        if best_buy < price_7d:
+            buy_trend = "FALLING"  # Prix d'achat en baisse -> Opportunité de discount
+
+        # CONDITION BANGER : Buy Order bradé + Sell Order en hausse de prix
+        if sell_trend == "RISING" and buy_trend == "FALLING":
+            is_banger = True
 
     # Liquidity Engine Calculations
-    available_sell_vol = sum(o['volume_remain'] for o in sell_orders)
-    available_buy_vol = sum(o['volume_remain'] for o in buy_orders)
-    
-    # Score 0-100 base on daily turnover ISK and transaction speed
     daily_isk_turnover = daily_volume * best_sell
     liquidity_score = min(100, max(0, int(math.log10(daily_isk_turnover + 1) * 10))) if daily_isk_turnover > 0 else 5
 
-    # Exit Time Estimation (Days) for 100M ISK position
+    # Est. Exit
     standard_position_qty = (100_000_000 / best_sell) if best_sell > 0 else 1
     est_liquidation_days = (standard_position_qty / daily_volume) if daily_volume > 0 else 999.0
 
-    # Risk Score Calculation (0-100)
-    risk_score = min(100, int((volatility * 100 * 0.5) + (100 - liquidity_score) * 0.5))
+    # Risk Score
+    risk_score = min(100, int((100 - liquidity_score) * 0.7))
 
-    # Global Opportunity Score (0-100)
-    # Penalizes high margin if liquidity is low
+    # Boost Score if BANGER setup detected
+    banger_bonus = 25 if is_banger else 0
     opportunity_score = int(
-        (min(roi_pct, 50) * 0.8) +
-        (liquidity_score * 0.5) -
-        (risk_score * 0.3)
+        (min(roi_pct, 50) * 0.6) +
+        (liquidity_score * 0.4) + 
+        banger_bonus
     )
     opportunity_score = min(100, max(0, opportunity_score))
 
@@ -131,11 +142,10 @@ def calculate_metrics(orders, history, broker_fee_pct=0.03, sales_tax_pct=0.036)
         'risk_score': risk_score,
         'opportunity_score': opportunity_score,
         'est_liquidation_days': round(est_liquidation_days, 1),
-        'available_sell_vol': available_sell_vol,
-        'available_buy_vol': available_buy_vol,
-        'volatility': round(volatility, 3)
+        'is_banger': is_banger,
+        'buy_trend': buy_trend,
+        'sell_trend': sell_trend
     }
-
 # ROUTES API
 
 @app.route('/')
