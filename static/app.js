@@ -181,6 +181,14 @@ function App() {
                                                 {getScoreBadge(op.opportunity_score)}
                                             </div>
 
+                                            {/* COLLES LE CODE ICI : */}
+                                            {op.is_banger && (
+                                                <div className="bg-gradient-to-r from-amber-500 to-rose-500 text-black font-extrabold text-[10px] uppercase px-2 py-0.5 rounded tracking-widest animate-pulse flex items-center space-x-1 mt-1">
+                                                    <span>🔥 BANGER SETUP</span>
+                                                    <span className="text-[9px] opacity-80">(Buy 📉 / Sell 📈)</span>
+                                                </div>
+                                            )}
+
                                             <div className="grid grid-cols-2 gap-2 text-xs">
                                                 <div>
                                                     <span className="text-slate-400 block">Buy Price</span>
